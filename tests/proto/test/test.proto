@@ -1,0 +1,187 @@
+syntax = "proto3";
+
+package test;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/lisoboss/grpchub-test/gen/test/testpb";
+
+// 测试服务，包含所有 gRPC 特性
+service TestService {
+  // 一元 RPC
+  rpc UnaryCall(UnaryRequest) returns (UnaryResponse);
+
+  // 客户端流式 RPC
+  rpc ClientStream(stream ClientStreamRequest) returns (ClientStreamResponse);
+
+  // 服务端流式 RPC
+  rpc ServerStream(ServerStreamRequest) returns (stream ServerStreamResponse);
+
+  // 双向流式 RPC
+  rpc BidirectionalStream(stream BidirectionalRequest) returns (stream BidirectionalResponse);
+
+  // 空请求和响应
+  rpc EmptyCall(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // 错误测试
+  rpc ErrorCall(ErrorRequest) returns (ErrorResponse);
+
+  // 大数据测试
+  rpc LargeDataCall(LargeDataRequest) returns (LargeDataResponse);
+
+  // 超时测试
+  rpc TimeoutCall(TimeoutRequest) returns (TimeoutResponse);
+
+  // 元数据测试
+  rpc MetadataCall(MetadataRequest) returns (MetadataResponse);
+
+  // 认证测试
+  rpc AuthCall(AuthRequest) returns (AuthResponse);
+}
+
+// 一元请求
+message UnaryRequest {
+  string message = 1;
+  int32 number = 2;
+  repeated string tags = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+// 一元响应
+message UnaryResponse {
+  string result = 1;
+  int32 processed_number = 2;
+  int32 tag_count = 3;
+  google.protobuf.Timestamp server_timestamp = 4;
+}
+
+// 客户端流请求
+message ClientStreamRequest {
+  string chunk = 1;
+  int32 sequence = 2;
+}
+
+// 客户端流响应
+message ClientStreamResponse {
+  string combined_result = 1;
+  int32 total_chunks = 2;
+  int32 total_length = 3;
+}
+
+// 服务端流请求
+message ServerStreamRequest {
+  int32 count = 1;
+  string prefix = 2;
+  int32 delay_ms = 3;
+}
+
+// 服务端流响应
+message ServerStreamResponse {
+  string message = 1;
+  int32 index = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// 双向流请求
+message BidirectionalRequest {
+  string message = 1;
+  int32 id = 2;
+  RequestType type = 3;
+}
+
+// 双向流响应
+message BidirectionalResponse {
+  string echo = 1;
+  int32 request_id = 2;
+  ResponseType type = 3;
+  google.protobuf.Timestamp processed_at = 4;
+}
+
+// 错误请求
+message ErrorRequest {
+  ErrorType error_type = 1;
+  string message = 2;
+}
+
+// 错误响应
+message ErrorResponse {
+  string result = 1;
+}
+
+// 大数据请求
+message LargeDataRequest {
+  bytes data = 1;
+  int32 size_mb = 2;
+}
+
+// 大数据响应
+message LargeDataResponse {
+  bytes processed_data = 1;
+  int32 original_size = 2;
+  int32 processed_size = 3;
+  string checksum = 4;
+}
+
+// 超时请求
+message TimeoutRequest {
+  int32 delay_seconds = 1;
+  string message = 2;
+}
+
+// 超时响应
+message TimeoutResponse {
+  string result = 1;
+  int32 actual_delay = 2;
+}
+
+// 元数据请求
+message MetadataRequest {
+  string key = 1;
+  string value = 2;
+}
+
+// 元数据响应
+message MetadataResponse {
+  map<string, string> received_metadata = 1;
+  string result = 2;
+}
+
+// 认证请求
+message AuthRequest {
+  string token = 1;
+  string user_id = 2;
+}
+
+// 认证响应
+message AuthResponse {
+  bool authenticated = 1;
+  string user_info = 2;
+  repeated string permissions = 3;
+}
+
+// 枚举类型
+enum RequestType {
+  REQUEST_TYPE_UNKNOWN = 0;
+  REQUEST_TYPE_ECHO = 1;
+  REQUEST_TYPE_TRANSFORM = 2;
+  REQUEST_TYPE_VALIDATE = 3;
+}
+
+enum ResponseType {
+  RESPONSE_TYPE_UNKNOWN = 0;
+  RESPONSE_TYPE_SUCCESS = 1;
+  RESPONSE_TYPE_ERROR = 2;
+  RESPONSE_TYPE_PROCESSED = 3;
+}
+
+enum ErrorType {
+  ERROR_TYPE_NONE = 0;
+  ERROR_TYPE_INVALID_ARGUMENT = 1;
+  ERROR_TYPE_NOT_FOUND = 2;
+  ERROR_TYPE_PERMISSION_DENIED = 3;
+  ERROR_TYPE_RESOURCE_EXHAUSTED = 4;
+  ERROR_TYPE_INTERNAL = 5;
+  ERROR_TYPE_UNAVAILABLE = 6;
+  ERROR_TYPE_DEADLINE_EXCEEDED = 7;
+}

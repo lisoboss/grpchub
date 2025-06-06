@@ -1,0 +1,22 @@
+version: v2
+modules:
+  - path: proto
+    lint:
+      use:
+        - STANDARD
+      except:
+        - IMPORT_USED
+      service_suffix: Service
+deps:
+  - buf.build/googleapis/googleapis:v1beta1.1.0
+lint:
+  use:
+    - STANDARD
+    - TIMESTAMP_SUFFIX
+breaking:
+  use:
+    - FILE
+plugins:
+  - plugin: plugin-timestamp-suffix
+    options:
+      timestamp_suffix: _time

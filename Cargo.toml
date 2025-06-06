@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "grpchub-serve",
+    "grpchub-pb",
+]
+resolver = "3"
+
+[workspace.dependencies]
+grpchub-pb = { path = "grpchub-pb" }

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package grpchub.channel;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/lisoboss/grpchub/gen/channel/channelv1";
+
+service ChannelService {
+  // 建立消息通道，支持双向流
+  rpc Channel(stream ChannelMessage) returns (stream ChannelMessage);
+}
+
+message ChannelMessage {
+  string sid = 4;
+  MessagePackage pkg = 5;
+}
+
+enum PackageType {
+  PT_UNKNOWN = 0;
+  PT_HELLO = 1;
+  PT_HEADER = 2;
+  PT_PAYLOAD = 3;
+  PT_TRAILER = 4;
+  PT_CLOSE = 5;
+  PT_ERROR = 6;
+}
+
+message MetadataEntry {
+  string key = 1;
+  repeated string values = 2;
+}
+
+message MessagePackage {
+  PackageType type = 1;
+  
+  string method = 3;
+  google.protobuf.Any payload = 4;  // 任意负载
+  repeated MetadataEntry md = 5;
+}
