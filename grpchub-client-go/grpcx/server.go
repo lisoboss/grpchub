@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/lisoboss/grpchub"
+	"github.com/lisoboss/grpchub/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -27,7 +28,7 @@ type GrpcServer struct {
 	closed    chan struct{}
 	closeOnce sync.Once
 
-	// TODO opts []grpc.ServerOption
+	opts serverOptions
 
 	accept   chan grpchub.StreamTransportInterface
 	mu       sync.Mutex // guards following
@@ -75,10 +76,7 @@ func (g *GrpcServer) handle(st grpchub.StreamTransportInterface) error {
 	ghStream := grpchub.NewServerStream(ctx, st)
 	defer ghStream.Close()
 
-	err := ghStream.RecvHello()
-	if err != nil {
-		return err
-	}
+	ghStream.RecvHello()
 
 	// logger.Infof("pkg Method: %s\n", ghStream.GetMethod())
 	// find method
@@ -87,8 +85,6 @@ func (g *GrpcServer) handle(st grpchub.StreamTransportInterface) error {
 	if err != nil {
 		return ghStream.WriteStatus(status.New(codes.Unimplemented, err.Error()))
 	}
-
-	// TODO 处理上下文 ctx
 
 	srv, knownService := g.services[service]
 	// logger.Infof("got knownService: %v\n", knownService)
@@ -112,13 +108,32 @@ func (g *GrpcServer) handle(st grpchub.StreamTransportInterface) error {
 }
 
 func (g *GrpcServer) processStreamingRPC(ghStream *grpchub.ServerStream, srv *serviceInfo, sd *grpc.StreamDesc) error {
-	// logger.Infof("processStreamingRPC: %s", sd.StreamName)
-
-	stream := newGrpcxServerStream(ghStream)
+	stream := newGrpcxServerStream(ghStream, g.opts.streamMacter)
 	defer func() {
 		stream.SendClose()
 	}()
+	ctx := NewSTransportContext(stream.Context(), g.opts.endpoint, sd.StreamName, stream.stream.GetHeader, stream.stream.GetTrailer)
+	if g.opts.streamTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, g.opts.streamTimeout)
+		defer cancel()
+	}
 
+	stream.stream.SetContext(ctx)
+
+	h := func(ctx context.Context) error {
+		stream.stream.SetContext(ctx)
+		return g.processStreamingRPCRaw(stream, srv, sd)
+	}
+
+	if len(g.opts.streamTransportMiddleware) > 0 {
+		h = middleware.StreamTransportChain(g.opts.streamTransportMiddleware...)(h)
+	}
+
+	return h(stream.Context())
+}
+
+func (g *GrpcServer) processStreamingRPCRaw(stream *GrpcxServerStream, srv *serviceInfo, sd *grpc.StreamDesc) error {
 	// logger.Infof("sd.Handler")
 	appErr := sd.Handler(srv.serviceImpl, stream)
 	if appErr != nil {
@@ -126,23 +141,43 @@ func (g *GrpcServer) processStreamingRPC(ghStream *grpchub.ServerStream, srv *se
 			appErr = stream.WriteStatus(appStatus)
 		}
 	}
-
 	return appErr
 }
 
 func (g *GrpcServer) processUnaryRPC(ghStream *grpchub.ServerStream, srv *serviceInfo, md *grpc.MethodDesc) error {
-	// logger.Infof("processUnaryRPC: %s", md.MethodName)
-
-	stream := newGrpcxServerStream(ghStream)
+	stream := newGrpcxServerStream(ghStream, g.opts.streamMacter)
 	defer func() {
 		stream.SendClose()
 	}()
 
+	return g.processUnaryRPCRaw(stream, srv, md, func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		ctx = NewSTransportContext(ctx, g.opts.endpoint, info.FullMethod, stream.stream.GetHeader, stream.stream.GetTrailer)
+
+		if g.opts.timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, g.opts.timeout)
+			defer cancel()
+		}
+
+		h := func(ctx context.Context, req any) (reply any, err error) {
+			return handler(ctx, req)
+		}
+
+		if len(g.opts.middleware) > 0 {
+			h = middleware.Chain(g.opts.middleware...)(h)
+		}
+
+		return h(ctx, req)
+	})
+
+}
+
+func (g *GrpcServer) processUnaryRPCRaw(stream *GrpcxServerStream, srv *serviceInfo, md *grpc.MethodDesc, interceptor grpc.UnaryServerInterceptor) error {
 	df := func(v any) error {
 		return stream.RecvMsg(v)
 	}
 
-	reply, appErr := md.Handler(srv.serviceImpl, ghStream.Context(), df, nil)
+	reply, appErr := md.Handler(srv.serviceImpl, stream.Context(), df, interceptor)
 	if appErr != nil {
 		if appStatus, ok := status.FromError(appErr); ok {
 			appErr = stream.WriteStatus(appStatus)
@@ -181,6 +216,10 @@ func (g *GrpcServer) Serve() error {
 }
 
 func (g *GrpcServer) GracefulStop() {
+	g.Stop()
+}
+
+func (g *GrpcServer) Stop() {
 	g.close()
 }
 
@@ -228,7 +267,7 @@ func (g *GrpcServer) GetServiceInfo() map[string]grpc.ServiceInfo {
 
 var _ reflection.ServiceInfoProvider = (*GrpcServer)(nil)
 
-func newGrpcServer(ctx context.Context, accept chan grpchub.StreamTransportInterface) *GrpcServer {
+func newGrpcServer(ctx context.Context, accept chan grpchub.StreamTransportInterface, opts ...ServerOption) *GrpcServer {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &GrpcServer{
@@ -237,24 +276,14 @@ func newGrpcServer(ctx context.Context, accept chan grpchub.StreamTransportInter
 		closed:   make(chan struct{}),
 		services: make(map[string]*serviceInfo),
 		accept:   accept,
+		opts:     parseServerOptions(opts),
 	}
 }
 
-// type serverKey struct{}
-
-// // serverFromContext gets the Server from the context.
-// func serverFromContext(ctx context.Context) *GrpcServer {
-// 	s, _ := ctx.Value(serverKey{}).(*GrpcServer)
-// 	return s
-// }
-
-// // contextWithServer sets the Server in the context.
-// func contextWithServer(ctx context.Context, server *GrpcServer) context.Context {
-// 	return context.WithValue(ctx, serverKey{}, server)
-// }
-
 // GrpcxServerStream
 type GrpcxServerStream struct {
+	middleware *middleware.Matcher
+
 	stream *grpchub.ServerStream
 }
 
@@ -273,7 +302,16 @@ func (g *GrpcxServerStream) Context() context.Context {
 
 // RecvMsg implements grpc.ServerStream.
 func (g *GrpcxServerStream) RecvMsg(m any) error {
-	return g.stream.Recv(m)
+	h := func(_ context.Context, req any) (any, error) {
+		return req, g.stream.Recv(req)
+	}
+
+	if next := g.middleware.Match(g.stream.GetMethod()); len(next) > 0 {
+		h = middleware.Chain(next...)(h)
+	}
+
+	_, err := h(g.Context(), m)
+	return err
 }
 
 // SendHeader implements grpc.ServerStream.
@@ -283,7 +321,16 @@ func (g *GrpcxServerStream) SendHeader(md metadata.MD) error {
 
 // SendMsg implements grpc.ServerStream.
 func (g *GrpcxServerStream) SendMsg(m any) error {
-	return g.stream.Send(grpchub.PT_PAYLOAD, m)
+	h := func(_ context.Context, req any) (any, error) {
+		return req, g.stream.Send(grpchub.PT_PAYLOAD, m)
+	}
+
+	if next := g.middleware.Match(g.stream.GetMethod()); len(next) > 0 {
+		h = middleware.Chain(next...)(h)
+	}
+
+	_, err := h(g.Context(), m)
+	return err
 }
 
 // SetHeader implements grpc.ServerStream.
@@ -299,8 +346,9 @@ func (g *GrpcxServerStream) SetTrailer(md metadata.MD) {
 
 var _ grpc.ServerStream = (*GrpcxServerStream)(nil)
 
-func newGrpcxServerStream(stream *grpchub.ServerStream) *GrpcxServerStream {
+func newGrpcxServerStream(stream *grpchub.ServerStream, middleware *middleware.Matcher) *GrpcxServerStream {
 	return &GrpcxServerStream{
-		stream: stream,
+		middleware: middleware,
+		stream:     stream,
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lisoboss/grpchub-test/test/utils"
+	"github.com/lisoboss/grpchub/grpcx"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -39,9 +40,9 @@ func TestNormalService_Auth(t *testing.T) {
 }
 
 func TestHubService_NoAuth(t *testing.T) {
-	stopS := utils.StartHubServer(t, false)
+	stopS := utils.StartHubServer(t, "no-auth")
 	defer stopS()
-	client, stopC := utils.StartHubClient(t)
+	client, stopC := utils.StartHubClient(t, "no-auth")
 	defer stopC()
 
 	EmptyCall(t, client)
@@ -49,11 +50,24 @@ func TestHubService_NoAuth(t *testing.T) {
 }
 
 func TestHubService_Auth(t *testing.T) {
-	stopS := utils.StartHubServer(t, true)
+	stopS := utils.StartHubServer(t, "auth",
+		grpcx.Middleware(
+			Auth("111111"),
+		),
+		grpcx.StreamTransportMiddleware(
+			StreamAuth("222222"),
+		),
+	)
 	defer stopS()
-	client, stopC := utils.StartHubClient(t)
+	client, stopC := utils.StartHubClient(t, "auth",
+		grpcx.WithMiddleware(
+			WithAuth("111111"),
+		),
+		grpcx.WithStreamTransportMiddleware(
+			WithStreamAuth("222222"),
+		))
 	defer stopC()
-	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer yolo")
+	ctx := context.Background()
 
 	AuthCall(t, client, ctx)
 	BidirectionalStream(t, client, ctx)

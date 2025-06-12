@@ -63,6 +63,7 @@ func (sm *streamManager) handleSer(msg *channelv1.ChannelMessage) {
 		}
 	}
 }
+
 func (sm *streamManager) handleCli(msg *channelv1.ChannelMessage) bool {
 	if val, ok := sm.streams.Load(msg.Sid); ok {
 		if h, ok := val.(handler); ok {
@@ -70,7 +71,6 @@ func (sm *streamManager) handleCli(msg *channelv1.ChannelMessage) bool {
 			return true
 		}
 	}
-
 	return false
 }
 

@@ -6,12 +6,11 @@ import (
 
 	"github.com/lisoboss/grpchub"
 	"github.com/lisoboss/grpchub/grpchublog"
-	"google.golang.org/grpc"
 )
 
 var logger = grpchublog.Component("grpcx")
 
-func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...grpc.DialOption) (gcConn *GrpcxClientConn, err error) {
+func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...ClientOption) (gcConn *GrpcxClientConn, err error) {
 	ctx := context.Background()
 	ghc.SetId(fmt.Sprintf("%s-cli", name), fmt.Sprintf("%s-ser", name))
 
@@ -30,12 +29,13 @@ func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...grpc.DialOption)
 		}
 	}()
 
-	gcConn = newGrpcxClientConn(ctx, sm)
+	opts = append(opts, WithEndpoint(ghc.Eendpoint()))
+	gcConn = newGrpcxClientConn(ctx, sm, opts...)
 
 	return
 }
 
-func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...grpc.ServerOption) (gsConn *GrpcServer, err error) {
+func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...ServerOption) (gsConn *GrpcServer, err error) {
 	ctx := context.Background()
 	ghc.SetId(fmt.Sprintf("%s-ser", name), fmt.Sprintf("%s-cli", name))
 
@@ -54,7 +54,8 @@ func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...grpc.ServerOptio
 		}
 	}()
 
-	gsConn = newGrpcServer(ctx, accept)
+	opts = append(opts, Endpoint(ghc.Eendpoint()))
+	gsConn = newGrpcServer(ctx, accept, opts...)
 
 	return
 }

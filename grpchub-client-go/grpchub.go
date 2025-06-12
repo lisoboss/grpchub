@@ -19,6 +19,11 @@ func (c *GrpcHubClient) SetId(senderId, receiverId string) {
 	c.senderId, c.receiverId = senderId, receiverId
 }
 
+// TODO Eendpoint is senderId or receiverId ?
+func (c *GrpcHubClient) Eendpoint() string {
+	return c.senderId
+}
+
 func (c *GrpcHubClient) Connect(ctx context.Context) (channelv1.ChannelService_ChannelClient, error) {
 	md := metadata.Pairs(
 		"sender_id", c.senderId,
