@@ -94,7 +94,7 @@ func StartServer(t *testing.T, enauth bool) (addr string, stop func()) {
 		if err != nil {
 			return nil, err
 		}
-		// TODO: This is example only, perform proper Oauth/OIDC verification!
+		// This is example only, perform proper Oauth/OIDC verification!
 		if token != "yolo" {
 			return nil, status.Error(codes.Unauthenticated, "invalid auth token")
 		}
