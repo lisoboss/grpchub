@@ -4,116 +4,113 @@ import (
 	"context"
 
 	"github.com/go-kratos/kratos/v2/transport"
+	ghTransport "github.com/lisoboss/grpchub/transport"
 	"google.golang.org/grpc/metadata"
 )
 
-type clientTransporter struct {
+type clientTransporter[Inner any] struct {
 	endpoint string
-	method   string
-	rqHeader headerCarrier
-	rpHeader func() metadata.MD
+
+	stream *ghTransport.ClientStream[Inner]
 }
 
 // Endpoint implements transport.Transporter.
-func (t *clientTransporter) Endpoint() string {
+func (t *clientTransporter[Inner]) Endpoint() string {
 	return t.endpoint
 }
 
 // Kind implements transport.Transporter.
-func (t *clientTransporter) Kind() transport.Kind {
+func (t *clientTransporter[Inner]) Kind() transport.Kind {
 	return "grpc"
 }
 
 // Operation implements transport.Transporter.
-func (t *clientTransporter) Operation() string {
-	return t.method
+func (t *clientTransporter[Inner]) Operation() string {
+	return t.stream.GetMethod()
 }
 
 // ReplyHeader implements transport.Transporter.
-func (t *clientTransporter) ReplyHeader() transport.Header {
-	return headerCarrier(t.rpHeader())
+func (t *clientTransporter[Inner]) ReplyHeader() transport.Header {
+	return headerCarrier(t.stream.ReplyHeader())
 }
 
 // RequestHeader implements transport.Transporter.
-func (t *clientTransporter) RequestHeader() transport.Header {
-	return t.rqHeader
+func (t *clientTransporter[Inner]) RequestHeader() transport.Header {
+	return headerCarrier(t.stream.RequestHeader())
 }
 
-var _ transport.Transporter = (*clientTransporter)(nil)
+var _ transport.Transporter = (*clientTransporter[any])(nil)
 
-type serverTransporter struct {
+type serverTransporter[Inner any] struct {
 	endpoint string
-	method   string
-	rqHeader func() metadata.MD
-	rpHeader func() metadata.MD
+
+	stream *ghTransport.ServerStream[Inner]
 }
 
 // Endpoint implements transport.Transporter.
-func (s *serverTransporter) Endpoint() string {
+func (s *serverTransporter[Inner]) Endpoint() string {
 	return s.endpoint
 }
 
 // Kind implements transport.Transporter.
-func (s *serverTransporter) Kind() transport.Kind {
+func (s *serverTransporter[Inner]) Kind() transport.Kind {
 	return "grpc"
 }
 
 // Operation implements transport.Transporter.
-func (s *serverTransporter) Operation() string {
-	return s.method
+func (s *serverTransporter[Inner]) Operation() string {
+	return s.stream.GetMethod()
 }
 
 // ReplyHeader implements transport.Transporter.
-func (s *serverTransporter) ReplyHeader() transport.Header {
-	return headerCarrier(s.rpHeader())
+func (s *serverTransporter[Inner]) ReplyHeader() transport.Header {
+	return headerCarrier(s.stream.ReplyHeader())
 }
 
 // RequestHeader implements transport.Transporter.
-func (s *serverTransporter) RequestHeader() transport.Header {
-	return headerCarrier(s.rqHeader())
+func (s *serverTransporter[Inner]) RequestHeader() transport.Header {
+	return headerCarrier(s.stream.RequestHeader())
 }
 
-var _ transport.Transporter = (*serverTransporter)(nil)
+var _ transport.Transporter = (*serverTransporter[any])(nil)
 
 type (
 	serverTransportKey struct{}
 	clientTransportKey struct{}
 )
 
-func NewServerTransportContext(ctx context.Context, str *serverTransporter) context.Context {
+func NewServerTransportContext[Inner any](ctx context.Context, str *serverTransporter[Inner]) context.Context {
 	return context.WithValue(ctx, serverTransportKey{}, str)
 }
 
-func FromServerTransportContext(ctx context.Context) (str *serverTransporter, ok bool) {
-	str, ok = ctx.Value(serverTransportKey{}).(*serverTransporter)
+func FromServerTransportContext[Inner any](ctx context.Context) (str *serverTransporter[Inner], ok bool) {
+	str, ok = ctx.Value(serverTransportKey{}).(*serverTransporter[Inner])
 	return
 }
 
-func NewClientTransportContext(ctx context.Context, ctr *clientTransporter) context.Context {
+func NewClientTransportContext[Inner any](ctx context.Context, ctr *clientTransporter[Inner]) context.Context {
 	return context.WithValue(ctx, clientTransportKey{}, ctr)
 }
 
-func FromClientTransportContext(ctx context.Context) (ctr *clientTransporter, ok bool) {
-	ctr, ok = ctx.Value(clientTransportKey{}).(*clientTransporter)
+func FromClientTransportContext[Inner any](ctx context.Context) (ctr *clientTransporter[Inner], ok bool) {
+	ctr, ok = ctx.Value(clientTransportKey{}).(*clientTransporter[Inner])
 	return
 }
 
-func NewCTransportContext(ctx context.Context, endpoint, method string) context.Context {
-	ct := &clientTransporter{
+func NewCTransportContext[Inner any](ctx context.Context, endpoint string, stream *ghTransport.ClientStream[Inner]) context.Context {
+	ct := &clientTransporter[Inner]{
 		endpoint: endpoint,
-		method:   method,
+		stream:   stream,
 	}
 	ctx = NewClientTransportContext(ctx, ct)
 	ctx = transport.NewClientContext(ctx, ct)
 	return ctx
 }
 
-func NewSTransportContext(ctx context.Context, endpoint, method string, frq, frp func() metadata.MD) context.Context {
-	st := &serverTransporter{
+func NewSTransportContext[Inner any](ctx context.Context, endpoint string, stream *ghTransport.ServerStream[Inner]) context.Context {
+	st := &serverTransporter[Inner]{
 		endpoint: endpoint,
-		method:   method,
-		rqHeader: frq,
-		rpHeader: frp,
+		stream:   stream,
 	}
 	ctx = NewServerTransportContext(ctx, st)
 	ctx = transport.NewServerContext(ctx, st)

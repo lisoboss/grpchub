@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package grpchub.channel;
+package channel.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/lisoboss/grpchub/gen/channel/channelv1";
+option go_package = "github.com/lisoboss/grpchub/gen/channel/v1;channel";
 
 service ChannelService {
   // 建立消息通道，支持双向流
@@ -22,9 +22,8 @@ enum PackageType {
   PT_HELLO = 1;
   PT_HEADER = 2;
   PT_PAYLOAD = 3;
-  PT_TRAILER = 4;
-  PT_CLOSE = 5;
-  PT_ERROR = 6;
+  PT_CLOSE = 4;
+  PT_ERROR = 5;
 }
 
 message MetadataEntry {

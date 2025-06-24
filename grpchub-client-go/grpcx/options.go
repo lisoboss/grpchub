@@ -80,6 +80,7 @@ type serverOptions struct {
 	middleware                []middleware.Middleware
 	streamTransportMiddleware []middleware.StreamTransportMiddleware
 	streamMacter              *middleware.Matcher
+	maxWorker                 int
 }
 
 // ServerOption is gRPC server option.
@@ -127,10 +128,18 @@ func StreamMessageMiddleware(selector string, m ...middleware.Middleware) Server
 	}
 }
 
+// MaxWorker sets the maximum number of concurrent streams.
+func MaxWorker(max int) ServerOption {
+	return func(s *serverOptions) {
+		s.maxWorker = max
+	}
+}
+
 func parseServerOptions(opts []ServerOption) serverOptions {
 	options := serverOptions{
 		timeout:      2000 * time.Millisecond,
 		streamMacter: middleware.NewMatcher(),
+		maxWorker:    100, // Default pool size
 	}
 
 	for _, o := range opts {

@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	"github.com/lisoboss/grpchub"
+	channelv1 "github.com/lisoboss/grpchub/gen/channel/v1"
 	"github.com/lisoboss/grpchub/grpchublog"
+	"github.com/lisoboss/grpchub/transport"
 )
 
 var logger = grpchublog.Component("grpcx")
 
-func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...ClientOption) (gcConn *GrpcxClientConn, err error) {
+func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...ClientOption) (gcConn *ClientConn[*channelv1.MessagePackage], err error) {
 	ctx := context.Background()
 	ghc.SetId(fmt.Sprintf("%s-cli", name), fmt.Sprintf("%s-ser", name))
 
@@ -19,8 +21,10 @@ func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...ClientOption) (g
 		return
 	}
 
-	sm := grpchub.NewClientStreamManager(ctx,
-		grpchub.NewTunnelConn(tunnel),
+	sm := grpchub.NewClientStreamManager(
+		&grpchub.WrappedMessage{},
+		&grpchub.WrappedMessagePackage{},
+		transport.NewTunnel(tunnel),
 	)
 
 	go func() {
@@ -30,12 +34,12 @@ func NewClient(name string, ghc *grpchub.GrpcHubClient, opts ...ClientOption) (g
 	}()
 
 	opts = append(opts, WithEndpoint(ghc.Eendpoint()))
-	gcConn = newGrpcxClientConn(ctx, sm, opts...)
+	gcConn = NewClientConn(ctx, sm, opts...)
 
 	return
 }
 
-func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...ServerOption) (gsConn *GrpcServer, err error) {
+func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...ServerOption) (gsConn *Server[*channelv1.MessagePackage], err error) {
 	ctx := context.Background()
 	ghc.SetId(fmt.Sprintf("%s-ser", name), fmt.Sprintf("%s-cli", name))
 
@@ -44,8 +48,10 @@ func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...ServerOption) (g
 		return
 	}
 
-	sm, accept := grpchub.NewServerStreamManager(ctx,
-		grpchub.NewTunnelConn(tunnel),
+	sm := grpchub.NewServerStreamManager(
+		&grpchub.WrappedMessage{},
+		&grpchub.WrappedMessagePackage{},
+		transport.NewTunnel(tunnel),
 	)
 
 	go func() {
@@ -55,7 +61,7 @@ func NewServer(name string, ghc *grpchub.GrpcHubClient, opts ...ServerOption) (g
 	}()
 
 	opts = append(opts, Endpoint(ghc.Eendpoint()))
-	gsConn = newGrpcServer(ctx, accept, opts...)
+	gsConn = newServer(ctx, sm.Accept, opts...)
 
 	return
 }

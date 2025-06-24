@@ -4,10 +4,11 @@
 // - protoc             (unknown)
 // source: channel/v1/channel.proto
 
-package channelv1
+package channel
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -19,7 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChannelService_Channel_FullMethodName = "/grpchub.channel.ChannelService/Channel"
+	ChannelService_Channel_FullMethodName = "/channel.v1.ChannelService/Channel"
 )
 
 // ChannelServiceClient is the client API for ChannelService service.
@@ -102,7 +103,7 @@ type ChannelService_ChannelServer = grpc.BidiStreamingServer[ChannelMessage, Cha
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ChannelService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "grpchub.channel.ChannelService",
+	ServiceName: "channel.v1.ChannelService",
 	HandlerType: (*ChannelServiceServer)(nil),
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{

@@ -36,8 +36,8 @@ func StreamTransportChain(m ...StreamTransportMiddleware) StreamTransportMiddlew
 
 func NewWrappedStreamTransportMiddleware(ms ...Middleware) []StreamTransportMiddleware {
 	sms := make([]StreamTransportMiddleware, len(ms))
-	for _, m := range ms {
-		sms = append(sms, func(sth StreamTransportHandler) StreamTransportHandler {
+	for i, m := range ms {
+		sms[i] = func(sth StreamTransportHandler) StreamTransportHandler {
 			mh := m(func(ctx context.Context, _ any) (_ any, err error) {
 				err = sth(ctx)
 				return
@@ -46,7 +46,7 @@ func NewWrappedStreamTransportMiddleware(ms ...Middleware) []StreamTransportMidd
 				_, err = mh(ctx, nil)
 				return
 			}
-		})
+		}
 	}
 	return sms
 }

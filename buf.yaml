@@ -2,8 +2,6 @@ version: v2
 modules:
   - path: proto
     lint:
-      use:
-        - STANDARD
       except:
         - IMPORT_USED
       service_suffix: Service
@@ -12,6 +10,7 @@ deps:
 lint:
   use:
     - STANDARD
+    - PLUGIN_FIELD_LOWER_SNAKE_CASE
     - TIMESTAMP_SUFFIX
 breaking:
   use:
@@ -20,3 +19,4 @@ plugins:
   - plugin: plugin-timestamp-suffix
     options:
       timestamp_suffix: _time
+  - plugin: plugin-field-lower-snake-case

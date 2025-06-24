@@ -12,7 +12,7 @@ pub mod google {
 
 pub mod grpchub {
     pub mod channel {
-        tonic::include_proto!("grpchub.channel");
+        tonic::include_proto!("channel.v1");
     }
 
     pub const FILE_DESCRIPTOR_SET: &[u8] =

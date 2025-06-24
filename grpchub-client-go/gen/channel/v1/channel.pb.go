@@ -4,7 +4,7 @@
 // 	protoc        (unknown)
 // source: channel/v1/channel.proto
 
-package channelv1
+package channel
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -30,9 +30,8 @@ const (
 	PackageType_PT_HELLO   PackageType = 1
 	PackageType_PT_HEADER  PackageType = 2
 	PackageType_PT_PAYLOAD PackageType = 3
-	PackageType_PT_TRAILER PackageType = 4
-	PackageType_PT_CLOSE   PackageType = 5
-	PackageType_PT_ERROR   PackageType = 6
+	PackageType_PT_CLOSE   PackageType = 4
+	PackageType_PT_ERROR   PackageType = 5
 )
 
 // Enum value maps for PackageType.
@@ -42,18 +41,16 @@ var (
 		1: "PT_HELLO",
 		2: "PT_HEADER",
 		3: "PT_PAYLOAD",
-		4: "PT_TRAILER",
-		5: "PT_CLOSE",
-		6: "PT_ERROR",
+		4: "PT_CLOSE",
+		5: "PT_ERROR",
 	}
 	PackageType_value = map[string]int32{
 		"PT_UNKNOWN": 0,
 		"PT_HELLO":   1,
 		"PT_HEADER":  2,
 		"PT_PAYLOAD": 3,
-		"PT_TRAILER": 4,
-		"PT_CLOSE":   5,
-		"PT_ERROR":   6,
+		"PT_CLOSE":   4,
+		"PT_ERROR":   5,
 	}
 )
 
@@ -190,7 +187,7 @@ func (x *MetadataEntry) GetValues() []string {
 
 type MessagePackage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          PackageType            `protobuf:"varint,1,opt,name=type,proto3,enum=grpchub.channel.PackageType" json:"type,omitempty"`
+	Type          PackageType            `protobuf:"varint,1,opt,name=type,proto3,enum=channel.v1.PackageType" json:"type,omitempty"`
 	Method        string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
 	Payload       *anypb.Any             `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"` // 任意负载
 	Md            []*MetadataEntry       `protobuf:"bytes,5,rep,name=md,proto3" json:"md,omitempty"`
@@ -260,31 +257,30 @@ var File_channel_v1_channel_proto protoreflect.FileDescriptor
 
 const file_channel_v1_channel_proto_rawDesc = "" +
 	"\n" +
-	"\x18channel/v1/channel.proto\x12\x0fgrpchub.channel\x1a\x19google/protobuf/any.proto\x1a\x1bgoogle/protobuf/empty.proto\"U\n" +
+	"\x18channel/v1/channel.proto\x12\n" +
+	"channel.v1\x1a\x19google/protobuf/any.proto\x1a\x1bgoogle/protobuf/empty.proto\"P\n" +
 	"\x0eChannelMessage\x12\x10\n" +
-	"\x03sid\x18\x04 \x01(\tR\x03sid\x121\n" +
-	"\x03pkg\x18\x05 \x01(\v2\x1f.grpchub.channel.MessagePackageR\x03pkg\"9\n" +
+	"\x03sid\x18\x04 \x01(\tR\x03sid\x12,\n" +
+	"\x03pkg\x18\x05 \x01(\v2\x1a.channel.v1.MessagePackageR\x03pkg\"9\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
-	"\x06values\x18\x02 \x03(\tR\x06values\"\xba\x01\n" +
-	"\x0eMessagePackage\x120\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x1c.grpchub.channel.PackageTypeR\x04type\x12\x16\n" +
+	"\x06values\x18\x02 \x03(\tR\x06values\"\xb0\x01\n" +
+	"\x0eMessagePackage\x12+\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x17.channel.v1.PackageTypeR\x04type\x12\x16\n" +
 	"\x06method\x18\x03 \x01(\tR\x06method\x12.\n" +
-	"\apayload\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\apayload\x12.\n" +
-	"\x02md\x18\x05 \x03(\v2\x1e.grpchub.channel.MetadataEntryR\x02md*v\n" +
+	"\apayload\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\apayload\x12)\n" +
+	"\x02md\x18\x05 \x03(\v2\x19.channel.v1.MetadataEntryR\x02md*f\n" +
 	"\vPackageType\x12\x0e\n" +
 	"\n" +
 	"PT_UNKNOWN\x10\x00\x12\f\n" +
 	"\bPT_HELLO\x10\x01\x12\r\n" +
 	"\tPT_HEADER\x10\x02\x12\x0e\n" +
 	"\n" +
-	"PT_PAYLOAD\x10\x03\x12\x0e\n" +
-	"\n" +
-	"PT_TRAILER\x10\x04\x12\f\n" +
-	"\bPT_CLOSE\x10\x05\x12\f\n" +
-	"\bPT_ERROR\x10\x062a\n" +
-	"\x0eChannelService\x12O\n" +
-	"\aChannel\x12\x1f.grpchub.channel.ChannelMessage\x1a\x1f.grpchub.channel.ChannelMessage(\x010\x01B3Z1github.com/lisoboss/grpchub/gen/channel/channelv1b\x06proto3"
+	"PT_PAYLOAD\x10\x03\x12\f\n" +
+	"\bPT_CLOSE\x10\x04\x12\f\n" +
+	"\bPT_ERROR\x10\x052W\n" +
+	"\x0eChannelService\x12E\n" +
+	"\aChannel\x12\x1a.channel.v1.ChannelMessage\x1a\x1a.channel.v1.ChannelMessage(\x010\x01B4Z2github.com/lisoboss/grpchub/gen/channel/v1;channelb\x06proto3"
 
 var (
 	file_channel_v1_channel_proto_rawDescOnce sync.Once
@@ -301,19 +297,19 @@ func file_channel_v1_channel_proto_rawDescGZIP() []byte {
 var file_channel_v1_channel_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_channel_v1_channel_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_channel_v1_channel_proto_goTypes = []any{
-	(PackageType)(0),       // 0: grpchub.channel.PackageType
-	(*ChannelMessage)(nil), // 1: grpchub.channel.ChannelMessage
-	(*MetadataEntry)(nil),  // 2: grpchub.channel.MetadataEntry
-	(*MessagePackage)(nil), // 3: grpchub.channel.MessagePackage
+	(PackageType)(0),       // 0: channel.v1.PackageType
+	(*ChannelMessage)(nil), // 1: channel.v1.ChannelMessage
+	(*MetadataEntry)(nil),  // 2: channel.v1.MetadataEntry
+	(*MessagePackage)(nil), // 3: channel.v1.MessagePackage
 	(*anypb.Any)(nil),      // 4: google.protobuf.Any
 }
 var file_channel_v1_channel_proto_depIdxs = []int32{
-	3, // 0: grpchub.channel.ChannelMessage.pkg:type_name -> grpchub.channel.MessagePackage
-	0, // 1: grpchub.channel.MessagePackage.type:type_name -> grpchub.channel.PackageType
-	4, // 2: grpchub.channel.MessagePackage.payload:type_name -> google.protobuf.Any
-	2, // 3: grpchub.channel.MessagePackage.md:type_name -> grpchub.channel.MetadataEntry
-	1, // 4: grpchub.channel.ChannelService.Channel:input_type -> grpchub.channel.ChannelMessage
-	1, // 5: grpchub.channel.ChannelService.Channel:output_type -> grpchub.channel.ChannelMessage
+	3, // 0: channel.v1.ChannelMessage.pkg:type_name -> channel.v1.MessagePackage
+	0, // 1: channel.v1.MessagePackage.type:type_name -> channel.v1.PackageType
+	4, // 2: channel.v1.MessagePackage.payload:type_name -> google.protobuf.Any
+	2, // 3: channel.v1.MessagePackage.md:type_name -> channel.v1.MetadataEntry
+	1, // 4: channel.v1.ChannelService.Channel:input_type -> channel.v1.ChannelMessage
+	1, // 5: channel.v1.ChannelService.Channel:output_type -> channel.v1.ChannelMessage
 	5, // [5:6] is the sub-list for method output_type
 	4, // [4:5] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name

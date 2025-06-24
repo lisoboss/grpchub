@@ -45,7 +45,7 @@ func StartHubClient(t *testing.T, name string, opts ...grpcx.ClientOption) (test
 	}
 
 	return testpb.NewTestServiceClient(conn), func() {
-		_ = conn.Close()
+		conn.Close()
 	}
 }
 

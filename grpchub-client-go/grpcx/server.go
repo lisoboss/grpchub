@@ -5,14 +5,21 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
-	"github.com/lisoboss/grpchub"
 	"github.com/lisoboss/grpchub/middleware"
+	"github.com/lisoboss/grpchub/transport"
+	"github.com/lisoboss/grpchub/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+)
+
+var (
+	statusTooManyRequests = status.New(codes.ResourceExhausted, "too many requests")
 )
 
 type serviceInfo struct {
@@ -22,20 +29,27 @@ type serviceInfo struct {
 	mdata       any
 }
 
-type GrpcServer struct {
+type Server[Inner any] struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
-	closed    chan struct{}
+	wg        sync.WaitGroup
 	closeOnce sync.Once
 
 	opts serverOptions
 
-	accept   chan grpchub.StreamTransportInterface
-	mu       sync.Mutex // guards following
+	accept func() <-chan *transport.ServerStream[Inner]
+
+	mu       sync.RWMutex // guards services
 	services map[string]*serviceInfo
+
+	// Cached service info to avoid recreating on every call
+	serviceInfoCache atomic.Value // map[string]grpc.ServiceInfo
+	serviceInfoDirty int32
+
+	pool *utils.WorkerPool[*transport.ServerStream[Inner]]
 }
 
-func (g *GrpcServer) register(sd *grpc.ServiceDesc, ss any) {
+func (g *Server[Inner]) register(sd *grpc.ServiceDesc, ss any) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -57,101 +71,126 @@ func (g *GrpcServer) register(sd *grpc.ServiceDesc, ss any) {
 		info.streams[d.StreamName] = d
 	}
 	g.services[sd.ServiceName] = info
+
+	// Mark service info cache as dirty
+	atomic.StoreInt32(&g.serviceInfoDirty, 1)
 }
 
-func (g *GrpcServer) close() error {
-	g.closeOnce.Do(func() {
-		g.cancel()
-		close(g.closed)
-		close(g.accept)
-	})
-	return nil
+func (g *Server[Inner]) close() {
+	g.cancel()
+	g.wg.Wait()
+
+	if g.pool != nil {
+		g.pool.Close()
+	}
 }
 
-func (g *GrpcServer) handle(st grpchub.StreamTransportInterface) error {
-	defer st.Close()
-	ctx := g.Context()
-	// ctx = contextWithServer(ctx, g)
+func (g *Server[Inner]) Close() {
+	g.closeOnce.Do(g.close)
+}
 
-	ghStream := grpchub.NewServerStream(ctx, st)
-	defer ghStream.Close()
+func (g *Server[Inner]) replyErr(stream *transport.ServerStream[Inner]) {
+	defer g.wg.Done()
 
-	ghStream.RecvHello()
+	defer stream.Close()
+	ctx := context.Background()
 
-	// logger.Infof("pkg Method: %s\n", ghStream.GetMethod())
-	// find method
-	service, method, err := parseFullMethod(ghStream.GetMethod())
-	// logger.Infof("service: %s, method: %s\n", service, method)
+	stream.WaitHandshake()
+
+	wrappedStream := newWrappedServerStream(ctx, stream, g.opts.streamMacter)
+
+	if err := wrappedStream.WriteStatus(statusTooManyRequests); err != nil {
+		logger.Errorf("failed to write status: %v", err)
+	}
+}
+
+func (g *Server[Inner]) handle(stream *transport.ServerStream[Inner]) {
+	defer g.wg.Done()
+
+	defer stream.Close()
+	ctx := context.Background()
+
+	stream.WaitHandshake()
+
+	wrappedStream := newWrappedServerStream(ctx, stream, g.opts.streamMacter)
+
+	// Find method
+	service, method, err := parseFullMethod(stream.GetMethod())
 	if err != nil {
-		return ghStream.WriteStatus(status.New(codes.Unimplemented, err.Error()))
+		if err := wrappedStream.WriteStatus(status.New(codes.Unimplemented, err.Error())); err != nil {
+			logger.Errorf("failed to write status: %v", err)
+		}
+		return
 	}
 
+	g.mu.RLock()
 	srv, knownService := g.services[service]
-	// logger.Infof("got knownService: %v\n", knownService)
+	g.mu.RUnlock()
+
 	if knownService {
 		if md, ok := srv.methods[method]; ok {
-			return g.processUnaryRPC(ghStream, srv, md)
+			if err := g.processUnaryRPC(wrappedStream, srv, md); err != nil {
+				logger.Errorf("unary RPC error: %v", err)
+			}
+			return
 		}
 		if sd, ok := srv.streams[method]; ok {
-			return g.processStreamingRPC(ghStream, srv, sd)
+			if err := g.processStreamingRPC(wrappedStream, srv, sd); err != nil {
+				logger.Errorf("streaming RPC error: %v", err)
+			}
+			return
 		}
 	}
 
-	var errDesc string
+	var errStatus *status.Status
 	if !knownService {
-		errDesc = fmt.Sprintf("unknown service %v", service)
+		errStatus = status.New(codes.Unimplemented, fmt.Sprintf("unknown service %v", service))
 	} else {
-		errDesc = fmt.Sprintf("unknown method %v for service %v", method, service)
+		errStatus = status.New(codes.Unimplemented, fmt.Sprintf("unknown method %v for service %v", method, service))
 	}
 
-	return ghStream.WriteStatus(status.New(codes.Unimplemented, errDesc))
+	if err := wrappedStream.WriteStatus(errStatus); err != nil {
+		logger.Errorf("failed to write status: %v", err)
+	}
 }
 
-func (g *GrpcServer) processStreamingRPC(ghStream *grpchub.ServerStream, srv *serviceInfo, sd *grpc.StreamDesc) error {
-	stream := newGrpcxServerStream(ghStream, g.opts.streamMacter)
-	defer func() {
-		stream.SendClose()
-	}()
-	ctx := NewSTransportContext(stream.Context(), g.opts.endpoint, sd.StreamName, stream.stream.GetHeader, stream.stream.GetTrailer)
+func (g *Server[Inner]) processStreamingRPC(stream *WrappedServerStream[Inner], srv *serviceInfo, sd *grpc.StreamDesc) error {
+
+	ctx := NewSTransportContext(stream.Context(), g.opts.endpoint, stream.GetStream())
 	if g.opts.streamTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, g.opts.streamTimeout)
 		defer cancel()
 	}
 
-	stream.stream.SetContext(ctx)
+	stream.SetContext(ctx)
 
 	h := func(ctx context.Context) error {
-		stream.stream.SetContext(ctx)
-		return g.processStreamingRPCRaw(stream, srv, sd)
+		stream.SetContext(ctx)
+		return sd.Handler(srv.serviceImpl, stream)
+		// g.processStreamingRPCRaw(stream, srv, sd)
 	}
 
 	if len(g.opts.streamTransportMiddleware) > 0 {
 		h = middleware.StreamTransportChain(g.opts.streamTransportMiddleware...)(h)
 	}
 
-	return h(stream.Context())
+	return g.processStreamingRPCRaw(stream, h)
 }
 
-func (g *GrpcServer) processStreamingRPCRaw(stream *GrpcxServerStream, srv *serviceInfo, sd *grpc.StreamDesc) error {
-	// logger.Infof("sd.Handler")
-	appErr := sd.Handler(srv.serviceImpl, stream)
+func (g *Server[Inner]) processStreamingRPCRaw(stream *WrappedServerStream[Inner], hendler func(ctx context.Context) error) error {
+	appErr := hendler(stream.Context())
 	if appErr != nil {
 		if appStatus, ok := status.FromError(appErr); ok {
-			appErr = stream.WriteStatus(appStatus)
+			return stream.WriteStatus(appStatus)
 		}
 	}
 	return appErr
 }
 
-func (g *GrpcServer) processUnaryRPC(ghStream *grpchub.ServerStream, srv *serviceInfo, md *grpc.MethodDesc) error {
-	stream := newGrpcxServerStream(ghStream, g.opts.streamMacter)
-	defer func() {
-		stream.SendClose()
-	}()
-
+func (g *Server[Inner]) processUnaryRPC(stream *WrappedServerStream[Inner], srv *serviceInfo, md *grpc.MethodDesc) error {
 	return g.processUnaryRPCRaw(stream, srv, md, func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		ctx = NewSTransportContext(ctx, g.opts.endpoint, info.FullMethod, stream.stream.GetHeader, stream.stream.GetTrailer)
+		ctx = NewSTransportContext(ctx, g.opts.endpoint, stream.GetStream())
 
 		if g.opts.timeout > 0 {
 			var cancel context.CancelFunc
@@ -169,62 +208,75 @@ func (g *GrpcServer) processUnaryRPC(ghStream *grpchub.ServerStream, srv *servic
 
 		return h(ctx, req)
 	})
-
 }
 
-func (g *GrpcServer) processUnaryRPCRaw(stream *GrpcxServerStream, srv *serviceInfo, md *grpc.MethodDesc, interceptor grpc.UnaryServerInterceptor) error {
+func (g *Server[Inner]) processUnaryRPCRaw(stream *WrappedServerStream[Inner], srv *serviceInfo, md *grpc.MethodDesc, interceptor grpc.UnaryServerInterceptor) error {
 	df := func(v any) error {
-		return stream.RecvMsg(v)
+		return stream.RecvMsgRaw(v)
 	}
 
 	reply, appErr := md.Handler(srv.serviceImpl, stream.Context(), df, interceptor)
 	if appErr != nil {
 		if appStatus, ok := status.FromError(appErr); ok {
-			appErr = stream.WriteStatus(appStatus)
+			return stream.WriteStatus(appStatus)
 		}
-	} else {
-		appErr = stream.SendMsg(reply)
+		return appErr
 	}
 
-	return appErr
+	return stream.SendMsgRaw(reply)
 }
 
-func (g *GrpcServer) Context() context.Context {
+func (g *Server[Inner]) Context() context.Context {
 	return g.ctx
 }
 
-func (g *GrpcServer) Serve() error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+func (g *Server[Inner]) Serve() error {
 	defer g.close()
+
+	// Create worker pool
+	var poolEnabled = false
+	if g.opts.maxWorker > 0 {
+		poolEnabled = true
+	}
+
+	if poolEnabled {
+		g.pool = utils.NewWorkerPool(g.ctx, g.opts.maxWorker, func(stream *transport.ServerStream[Inner]) {
+			g.handle(stream)
+		})
+	}
 
 	for {
 		select {
 		case <-g.ctx.Done():
 			return g.ctx.Err()
-		case <-g.closed:
-			return nil
-		case st := <-g.accept:
-			go func() {
-				err := g.handle(st)
-				if err != nil {
-					logger.Errorf("GrpcServer handle err: %s", err)
+		case stream, ok := <-g.accept():
+			if !ok {
+				return fmt.Errorf("accept chan closed")
+			}
+			g.wg.Add(1)
+			if poolEnabled {
+				// Try to submit work to pool, fallback to direct handling if pool is full
+				if !g.pool.Submit(stream) {
+					// Pool is full or closed, reply Err
+					go g.replyErr(stream)
 				}
-			}()
+			} else {
+				go g.handle(stream)
+			}
+
 		}
 	}
 }
 
-func (g *GrpcServer) GracefulStop() {
+func (g *Server[Inner]) GracefulStop() {
 	g.Stop()
 }
 
-func (g *GrpcServer) Stop() {
+func (g *Server[Inner]) Stop() {
 	g.close()
 }
 
-// RegisterService implements grpc.ServiceRegistrar.
-func (g *GrpcServer) RegisterService(sd *grpc.ServiceDesc, ss any) {
+func (g *Server[Inner]) RegisterService(sd *grpc.ServiceDesc, ss any) {
 	if ss != nil {
 		ht := reflect.TypeOf(sd.HandlerType).Elem()
 		st := reflect.TypeOf(ss)
@@ -235,13 +287,23 @@ func (g *GrpcServer) RegisterService(sd *grpc.ServiceDesc, ss any) {
 	g.register(sd, ss)
 }
 
-var _ grpc.ServiceRegistrar = (*GrpcServer)(nil)
+var _ grpc.ServiceRegistrar = (*Server[any])(nil)
 
-// GetServiceInfo implements reflection.ServiceInfoProvider.
-func (g *GrpcServer) GetServiceInfo() map[string]grpc.ServiceInfo {
-	ret := make(map[string]grpc.ServiceInfo)
+func (g *Server[Inner]) GetServiceInfo() map[string]grpc.ServiceInfo {
+	// Check if cache is dirty
+	if atomic.LoadInt32(&g.serviceInfoDirty) == 0 {
+		if cached := g.serviceInfoCache.Load(); cached != nil {
+			return cached.(map[string]grpc.ServiceInfo)
+		}
+	}
+
+	// Rebuild cache
+	g.mu.RLock()
+	ret := make(map[string]grpc.ServiceInfo, len(g.services))
 	for n, srv := range g.services {
-		methods := make([]grpc.MethodInfo, 0, len(srv.methods)+len(srv.streams))
+		methodsLen := len(srv.methods) + len(srv.streams)
+		methods := make([]grpc.MethodInfo, 0, methodsLen)
+
 		for m := range srv.methods {
 			methods = append(methods, grpc.MethodInfo{
 				Name:           m,
@@ -262,92 +324,116 @@ func (g *GrpcServer) GetServiceInfo() map[string]grpc.ServiceInfo {
 			Metadata: srv.mdata,
 		}
 	}
+	g.mu.RUnlock()
+
+	// Update cache
+	g.serviceInfoCache.Store(ret)
+	atomic.StoreInt32(&g.serviceInfoDirty, 0)
+
 	return ret
 }
 
-var _ reflection.ServiceInfoProvider = (*GrpcServer)(nil)
+var _ reflection.ServiceInfoProvider = (*Server[any])(nil)
 
-func newGrpcServer(ctx context.Context, accept chan grpchub.StreamTransportInterface, opts ...ServerOption) *GrpcServer {
+func newServer[Inner any](ctx context.Context, accept func() <-chan *transport.ServerStream[Inner], opts ...ServerOption) *Server[Inner] {
 	ctx, cancel := context.WithCancel(ctx)
-
-	return &GrpcServer{
+	return &Server[Inner]{
 		ctx:      ctx,
 		cancel:   cancel,
-		closed:   make(chan struct{}),
 		services: make(map[string]*serviceInfo),
 		accept:   accept,
 		opts:     parseServerOptions(opts),
 	}
 }
 
-// GrpcxServerStream
-type GrpcxServerStream struct {
+type WrappedServerStream[Inner any] struct {
+	ctx        context.Context
+	stream     *transport.ServerStream[Inner]
 	middleware *middleware.Matcher
-
-	stream *grpchub.ServerStream
 }
 
-func (g *GrpcxServerStream) WriteStatus(st *status.Status) error {
-	return g.stream.WriteStatus(st)
+func (w *WrappedServerStream[Inner]) WriteStatus(status *status.Status) error {
+	return w.stream.WriteError(status.Err())
 }
 
-func (g *GrpcxServerStream) SendClose() error {
-	return g.stream.Send(grpchub.PT_CLOSE, nil)
+func (w *WrappedServerStream[Inner]) GetStream() *transport.ServerStream[Inner] {
+	return w.stream
 }
 
-// Context implements grpc.ServerStream.
-func (g *GrpcxServerStream) Context() context.Context {
-	return g.stream.Context()
-}
-
-// RecvMsg implements grpc.ServerStream.
-func (g *GrpcxServerStream) RecvMsg(m any) error {
-	h := func(_ context.Context, req any) (any, error) {
-		return req, g.stream.Recv(req)
-	}
-
-	if next := g.middleware.Match(g.stream.GetMethod()); len(next) > 0 {
-		h = middleware.Chain(next...)(h)
-	}
-
-	_, err := h(g.Context(), m)
-	return err
+func (w *WrappedServerStream[Inner]) CloseSend() error {
+	return w.stream.SendClose()
 }
 
 // SendHeader implements grpc.ServerStream.
-func (g *GrpcxServerStream) SendHeader(md metadata.MD) error {
-	return g.stream.Send(grpchub.PT_HEADER, md)
+func (w *WrappedServerStream[Inner]) SendHeader(md metadata.MD) error {
+	return w.stream.SendHeader(md)
 }
 
-// SendMsg implements grpc.ServerStream.
-func (g *GrpcxServerStream) SendMsg(m any) error {
+func (w *WrappedServerStream[Inner]) RecvMsgRaw(m any) error {
+	reply, err := w.stream.Recv()
+	if err != nil {
+		return err
+	}
+	proto.Merge(m.(proto.Message), reply.(proto.Message))
+	return nil
+}
+
+// RecvMsg implements grpc.ServerStream.
+func (w *WrappedServerStream[Inner]) RecvMsg(m any) error {
 	h := func(_ context.Context, req any) (any, error) {
-		return req, g.stream.Send(grpchub.PT_PAYLOAD, m)
+		return req, w.RecvMsgRaw(req)
 	}
 
-	if next := g.middleware.Match(g.stream.GetMethod()); len(next) > 0 {
+	if next := w.middleware.Match(w.stream.GetMethod()); len(next) > 0 {
 		h = middleware.Chain(next...)(h)
 	}
 
-	_, err := h(g.Context(), m)
+	_, err := h(w.Context(), m)
+	return err
+}
+
+func (w *WrappedServerStream[Inner]) SendMsgRaw(m any) error {
+	return w.stream.SendPayload(m.(proto.Message))
+}
+
+// SendMsg implements grpc.ServerStream.
+func (w *WrappedServerStream[Inner]) SendMsg(m any) error {
+	h := func(_ context.Context, req any) (any, error) {
+		return req, w.SendMsgRaw(req)
+	}
+
+	if next := w.middleware.Match(w.stream.GetMethod()); len(next) > 0 {
+		h = middleware.Chain(next...)(h)
+	}
+
+	_, err := h(w.Context(), m)
 	return err
 }
 
 // SetHeader implements grpc.ServerStream.
-func (g *GrpcxServerStream) SetHeader(md metadata.MD) error {
-	g.stream.SetHeader(md)
+func (w *WrappedServerStream[Inner]) SetHeader(md metadata.MD) error {
+	w.stream.RequestHeader().Extend(map[string][]string(md))
 	return nil
 }
 
 // SetTrailer implements grpc.ServerStream.
-func (g *GrpcxServerStream) SetTrailer(md metadata.MD) {
-	g.stream.SetTrailer(md)
+func (w *WrappedServerStream[Inner]) SetTrailer(md metadata.MD) {
+	w.stream.ReplyHeader().Extend(map[string][]string(md))
 }
 
-var _ grpc.ServerStream = (*GrpcxServerStream)(nil)
+func (w *WrappedServerStream[Inner]) Context() context.Context {
+	return w.ctx
+}
 
-func newGrpcxServerStream(stream *grpchub.ServerStream, middleware *middleware.Matcher) *GrpcxServerStream {
-	return &GrpcxServerStream{
+func (w *WrappedServerStream[Inner]) SetContext(ctx context.Context) {
+	w.ctx = ctx
+}
+
+var _ grpc.ServerStream = (*WrappedServerStream[any])(nil)
+
+func newWrappedServerStream[Inner any](ctx context.Context, stream *transport.ServerStream[Inner], middleware *middleware.Matcher) *WrappedServerStream[Inner] {
+	return &WrappedServerStream[Inner]{
+		ctx:        ctx,
 		middleware: middleware,
 		stream:     stream,
 	}

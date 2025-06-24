@@ -6,6 +6,7 @@ import (
 
 	"github.com/lisoboss/grpchub-test/test/utils"
 	"github.com/lisoboss/grpchub/grpcx"
+	"github.com/lisoboss/grpchub/middleware"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -65,6 +66,34 @@ func TestHubService_Auth(t *testing.T) {
 		),
 		grpcx.WithStreamTransportMiddleware(
 			WithStreamAuth("222222"),
+		))
+	defer stopC()
+	ctx := context.Background()
+
+	AuthCall(t, client, ctx)
+	BidirectionalStream(t, client, ctx)
+}
+
+func TestHubService_WrappedMiddleware(t *testing.T) {
+	stopS := utils.StartHubServer(t, "auth",
+		grpcx.Middleware(
+			Auth("111111"),
+		),
+		grpcx.StreamTransportMiddleware(
+			middleware.NewWrappedStreamTransportMiddleware(
+				Auth("222222"),
+			)...,
+		),
+	)
+	defer stopS()
+	client, stopC := utils.StartHubClient(t, "auth",
+		grpcx.WithMiddleware(
+			WithAuth("111111"),
+		),
+		grpcx.WithStreamTransportMiddleware(
+			middleware.NewWrappedStreamTransportMiddleware(
+				WithAuth("222222"),
+			)...,
 		))
 	defer stopC()
 	ctx := context.Background()

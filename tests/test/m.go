@@ -6,7 +6,6 @@ import (
 	"github.com/go-kratos/kratos/v2/transport"
 	"github.com/lisoboss/grpchub/middleware"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -17,7 +16,12 @@ const (
 func WithAuth(token string) middleware.Middleware {
 	return func(next middleware.Handler) middleware.Handler {
 		return func(ctx context.Context, req any) (resp any, err error) {
-			return next(metadata.AppendToOutgoingContext(ctx, authKey, token), req)
+			txp, ok := transport.FromClientContext(ctx)
+			if !ok {
+				return resp, status.Error(codes.Aborted, "Not found Transporter")
+			}
+			txp.RequestHeader().Set(authKey, token)
+			return next(ctx, req)
 		}
 	}
 }
@@ -42,7 +46,12 @@ func Auth(token string) middleware.Middleware {
 func WithStreamAuth(token string) middleware.StreamTransportMiddleware {
 	return func(next middleware.StreamTransportHandler) middleware.StreamTransportHandler {
 		return func(ctx context.Context) error {
-			return next(metadata.AppendToOutgoingContext(ctx, authKey, token))
+			txp, ok := transport.FromClientContext(ctx)
+			if !ok {
+				return status.Error(codes.Aborted, "Not found Transporter")
+			}
+			txp.RequestHeader().Set(authKey, token)
+			return next(ctx)
 		}
 	}
 }

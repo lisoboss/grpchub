@@ -100,7 +100,6 @@ func BidirectionalStream(t *testing.T, client testpb.TestServiceClient, ctx cont
 	reply, err = stream.Recv()
 	require.NoError(t, err)
 	assert.Equal(t, reply.Echo, fmt.Sprintf("Echo: %s", reqs[int(reply.RequestId)].Message))
-
 }
 func LargeDataCall(t *testing.T, client testpb.TestServiceClient) {}
 func TimeoutCall(t *testing.T, client testpb.TestServiceClient)   {}
