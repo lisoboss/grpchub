@@ -1,10 +1,14 @@
 package grpchub
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 
 	channelv1 "github.com/lisoboss/grpchub/gen/channel/v1"
 	"github.com/lisoboss/grpchub/grpchublog"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -36,4 +40,35 @@ func buildMetadataEntries(md metadata.MD) []*channelv1.MetadataEntry {
 		})
 	}
 	return entries
+}
+
+func defaultGrpchubDialOptionsWithTLS(caPEMBlock, certPEMBlock, keyPEMBlock []byte) ([]grpc.DialOption, error) {
+	// 加载客户端证书和私钥
+	cert, err := tls.X509KeyPair(certPEMBlock, keyPEMBlock)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+
+	// 加载 CA 证书
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(caPEMBlock) {
+		return nil, fmt.Errorf("failed to append CA cert")
+	}
+
+	// 构造 TLS 配置
+	tlsConfig := &tls.Config{
+		ServerName:         "localhost",
+		Certificates:       []tls.Certificate{cert}, // 客户端证书和私钥
+		RootCAs:            certPool,                // 服务端证书校验
+		InsecureSkipVerify: false,                   // 开启主机名校验
+	}
+
+	// 使用 TLS 凭证连接
+	creds := credentials.NewTLS(tlsConfig)
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithDefaultCallOptions(grpc.UseCompressor("zstd")),
+	}
+	return opts, nil
 }

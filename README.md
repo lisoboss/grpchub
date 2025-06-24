@@ -2,5 +2,5 @@
 
 ## todo
 
-- [ ] Add tls certificate authentication
+- [x] Add tls certificate authentication
 - [ ] Integrate with the Kratos ecosystem

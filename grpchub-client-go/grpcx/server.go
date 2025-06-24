@@ -108,7 +108,7 @@ func (g *Server[Inner]) handle(stream *transport.ServerStream[Inner]) {
 	defer g.wg.Done()
 
 	defer stream.Close()
-	ctx := context.Background()
+	ctx := NewSTransportContext(context.Background(), g.opts.endpoint, stream)
 
 	stream.WaitHandshake()
 
@@ -155,8 +155,8 @@ func (g *Server[Inner]) handle(stream *transport.ServerStream[Inner]) {
 }
 
 func (g *Server[Inner]) processStreamingRPC(stream *WrappedServerStream[Inner], srv *serviceInfo, sd *grpc.StreamDesc) error {
+	ctx := stream.Context()
 
-	ctx := NewSTransportContext(stream.Context(), g.opts.endpoint, stream.GetStream())
 	if g.opts.streamTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, g.opts.streamTimeout)
@@ -190,8 +190,6 @@ func (g *Server[Inner]) processStreamingRPCRaw(stream *WrappedServerStream[Inner
 
 func (g *Server[Inner]) processUnaryRPC(stream *WrappedServerStream[Inner], srv *serviceInfo, md *grpc.MethodDesc) error {
 	return g.processUnaryRPCRaw(stream, srv, md, func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		ctx = NewSTransportContext(ctx, g.opts.endpoint, stream.GetStream())
-
 		if g.opts.timeout > 0 {
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, g.opts.timeout)

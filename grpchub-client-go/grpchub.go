@@ -4,6 +4,7 @@ import (
 	"context"
 
 	channelv1 "github.com/lisoboss/grpchub/gen/channel/v1"
+	_ "github.com/mostynb/go-grpc-compression/zstd" // zstd 压缩器
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -45,7 +46,13 @@ func NewGrpcHubClientFrom(cc grpc.ClientConnInterface, closeFn func() error) (c 
 	return
 }
 
-func NewGrpcHubClient(target string, opts ...grpc.DialOption) (c *GrpcHubClient, err error) {
+func NewGrpcHubClient(target string, caPEMBlock, certPEMBlock, keyPEMBlock []byte, opts ...grpc.DialOption) (c *GrpcHubClient, err error) {
+	defaultOpts, err := defaultGrpchubDialOptionsWithTLS(caPEMBlock, certPEMBlock, keyPEMBlock)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(defaultOpts, opts...)
+
 	conn, err := grpc.NewClient(target, opts...)
 	if err != nil {
 		return

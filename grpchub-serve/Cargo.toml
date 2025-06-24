@@ -4,13 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# workspace
+grpchub-pb.workspace = true
+# 
 prost = "0.13"
 prost-types = "0.13"
-tonic = "0.13.1"
+clap = { version = "4.5.40", features = ["env", "derive"] }
+dashmap = "6.1.0"
+tonic-reflection = "0.13.1"
+tonic-health = "0.13.1"
+tonic = { version = "0.13.1", features = ["zstd", "_tls-any", "tls-aws-lc"] }
 tokio = { version = "1.45.0", features = ["full"] }
 tokio-stream = { version = "0.1.17", features = ["full"] }
 h2 = { version = "0.4.10", features = ["stream"] }
-# workspace
-grpchub-pb.workspace = true
-dashmap = "6.1.0"
-tonic-reflection = "0.13.1"

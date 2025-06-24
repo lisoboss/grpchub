@@ -41,9 +41,10 @@ func TestNormalService_Auth(t *testing.T) {
 }
 
 func TestHubService_NoAuth(t *testing.T) {
-	stopS := utils.StartHubServer(t, "no-auth")
+	var name = "no-auth"
+	stopS := utils.StartHubServer(t, name)
 	defer stopS()
-	client, stopC := utils.StartHubClient(t, "no-auth")
+	client, stopC := utils.StartHubClient(t, name)
 	defer stopC()
 
 	EmptyCall(t, client)
@@ -51,7 +52,8 @@ func TestHubService_NoAuth(t *testing.T) {
 }
 
 func TestHubService_Auth(t *testing.T) {
-	stopS := utils.StartHubServer(t, "auth",
+	var name = "auth"
+	stopS := utils.StartHubServer(t, name,
 		grpcx.Middleware(
 			Auth("111111"),
 		),
@@ -60,7 +62,7 @@ func TestHubService_Auth(t *testing.T) {
 		),
 	)
 	defer stopS()
-	client, stopC := utils.StartHubClient(t, "auth",
+	client, stopC := utils.StartHubClient(t, name,
 		grpcx.WithMiddleware(
 			WithAuth("111111"),
 		),
@@ -75,7 +77,8 @@ func TestHubService_Auth(t *testing.T) {
 }
 
 func TestHubService_WrappedMiddleware(t *testing.T) {
-	stopS := utils.StartHubServer(t, "auth",
+	var name = "wrapped-middleware"
+	stopS := utils.StartHubServer(t, name,
 		grpcx.Middleware(
 			Auth("111111"),
 		),
@@ -86,7 +89,7 @@ func TestHubService_WrappedMiddleware(t *testing.T) {
 		),
 	)
 	defer stopS()
-	client, stopC := utils.StartHubClient(t, "auth",
+	client, stopC := utils.StartHubClient(t, name,
 		grpcx.WithMiddleware(
 			WithAuth("111111"),
 		),

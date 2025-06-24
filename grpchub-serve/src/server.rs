@@ -6,7 +6,8 @@ use grpchub_pb::grpchub::{
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
-use tonic::{Request, Response, Status, Streaming};
+use tonic::{Request, Response, Status, Streaming, codec::CompressionEncoding};
+use tonic_health::pb::health_server::{Health, HealthServer};
 
 type ChannelResult<T> = Result<Response<T>, Status>;
 type ChannelStream = Pin<Box<dyn Stream<Item = Result<channel::ChannelMessage, Status>> + Send>>;
@@ -110,7 +111,11 @@ fn parse_metadata_value<'a>(
 
 pub fn new_service() -> channel::channel_service_server::ChannelServiceServer<ChannelServer> {
     let server = ChannelServer::new();
-    channel::channel_service_server::ChannelServiceServer::new(server)
+    let server = channel::channel_service_server::ChannelServiceServer::new(server)
+        .send_compressed(CompressionEncoding::Zstd)
+        .accept_compressed(CompressionEncoding::Zstd);
+
+    server
 }
 
 pub fn new_reflection_service() -> tonic_reflection::server::v1::ServerReflectionServer<
@@ -120,4 +125,14 @@ pub fn new_reflection_service() -> tonic_reflection::server::v1::ServerReflectio
         .register_encoded_file_descriptor_set(grpchub::FILE_DESCRIPTOR_SET)
         .build_v1()
         .unwrap()
+}
+
+pub async fn new_health_service() -> HealthServer<impl Health> {
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
+
+    health_reporter
+        .set_serving::<channel::channel_service_server::ChannelServiceServer<ChannelServer>>()
+        .await;
+
+    health_service
 }

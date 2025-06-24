@@ -12,8 +12,13 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.36.0
 	go.opentelemetry.io/otel/sdk v1.36.0
 	go.opentelemetry.io/otel/trace v1.36.0
-	google.golang.org/grpc v1.72.2
+	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
+)
+
+require (
+	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 )
 
 require (
