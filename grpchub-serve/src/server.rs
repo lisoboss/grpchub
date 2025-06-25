@@ -50,7 +50,11 @@ impl channel::channel_service_server::ChannelService for ChannelServer {
         tokio::spawn(async move {
             while let Some(Ok(msg)) = stream.next().await {
                 if let Some(tx) = channels.get(&receiver_id) {
-                    println!("send {} => {}", msg.sid, receiver_id);
+                    let t = match &msg.pkg {
+                        Some(pkg) => pkg.r#type(),
+                        _ => channel::PackageType::PtUnknown,
+                    };
+                    println!("send {}({}) => {}", msg.sid, t.as_str_name(), receiver_id);
                     let _ = tx.send(Ok(msg)).await;
                 } else {
                     let _ = tx

@@ -83,8 +83,8 @@ func (PackageType) EnumDescriptor() ([]byte, []int) {
 
 type ChannelMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sid           string                 `protobuf:"bytes,4,opt,name=sid,proto3" json:"sid,omitempty"`
-	Pkg           *MessagePackage        `protobuf:"bytes,5,opt,name=pkg,proto3" json:"pkg,omitempty"`
+	Sid           string                 `protobuf:"bytes,1,opt,name=sid,proto3" json:"sid,omitempty"`
+	Pkg           *MessagePackage        `protobuf:"bytes,2,opt,name=pkg,proto3" json:"pkg,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -188,9 +188,9 @@ func (x *MetadataEntry) GetValues() []string {
 type MessagePackage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          PackageType            `protobuf:"varint,1,opt,name=type,proto3,enum=channel.v1.PackageType" json:"type,omitempty"`
-	Method        string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
-	Payload       *anypb.Any             `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"` // 任意负载
-	Md            []*MetadataEntry       `protobuf:"bytes,5,rep,name=md,proto3" json:"md,omitempty"`
+	Method        string                 `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	Payload       *anypb.Any             `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"` // 任意负载
+	Md            []*MetadataEntry       `protobuf:"bytes,4,rep,name=md,proto3" json:"md,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -260,16 +260,16 @@ const file_channel_v1_channel_proto_rawDesc = "" +
 	"\x18channel/v1/channel.proto\x12\n" +
 	"channel.v1\x1a\x19google/protobuf/any.proto\x1a\x1bgoogle/protobuf/empty.proto\"P\n" +
 	"\x0eChannelMessage\x12\x10\n" +
-	"\x03sid\x18\x04 \x01(\tR\x03sid\x12,\n" +
-	"\x03pkg\x18\x05 \x01(\v2\x1a.channel.v1.MessagePackageR\x03pkg\"9\n" +
+	"\x03sid\x18\x01 \x01(\tR\x03sid\x12,\n" +
+	"\x03pkg\x18\x02 \x01(\v2\x1a.channel.v1.MessagePackageR\x03pkg\"9\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
 	"\x06values\x18\x02 \x03(\tR\x06values\"\xb0\x01\n" +
 	"\x0eMessagePackage\x12+\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x17.channel.v1.PackageTypeR\x04type\x12\x16\n" +
-	"\x06method\x18\x03 \x01(\tR\x06method\x12.\n" +
-	"\apayload\x18\x04 \x01(\v2\x14.google.protobuf.AnyR\apayload\x12)\n" +
-	"\x02md\x18\x05 \x03(\v2\x19.channel.v1.MetadataEntryR\x02md*f\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12.\n" +
+	"\apayload\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\apayload\x12)\n" +
+	"\x02md\x18\x04 \x03(\v2\x19.channel.v1.MetadataEntryR\x02md*f\n" +
 	"\vPackageType\x12\x0e\n" +
 	"\n" +
 	"PT_UNKNOWN\x10\x00\x12\f\n" +

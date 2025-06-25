@@ -13,8 +13,8 @@ service ChannelService {
 }
 
 message ChannelMessage {
-  string sid = 4;
-  MessagePackage pkg = 5;
+  string sid = 1;
+  MessagePackage pkg = 2;
 }
 
 enum PackageType {
@@ -34,7 +34,7 @@ message MetadataEntry {
 message MessagePackage {
   PackageType type = 1;
   
-  string method = 3;
-  google.protobuf.Any payload = 4;  // 任意负载
-  repeated MetadataEntry md = 5;
+  string method = 2;
+  google.protobuf.Any payload = 3;  // 任意负载
+  repeated MetadataEntry md = 4;
 }
