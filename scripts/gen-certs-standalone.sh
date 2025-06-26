@@ -143,7 +143,7 @@ subjectAltName = @alt_names
 
 [alt_names]
 EOF
-    
+
     alt_count=1
     if [[ -n "$CUSTOM_DOMAIN" ]]; then
         echo "DNS.$alt_count = $CUSTOM_DOMAIN" >> server.ext
@@ -152,17 +152,17 @@ EOF
         alt_count=$((alt_count + 1))
         echo "🔒 Added DNS names: $CUSTOM_DOMAIN, *.$CUSTOM_DOMAIN"
     fi
-    
+
     if [[ -n "$CUSTOM_IP" ]]; then
         echo "IP.$alt_count = $CUSTOM_IP" >> server.ext
         echo "🔒 Added IP address: $CUSTOM_IP"
     fi
-    
+
     echo "⚠️  Security: Certificate restricted to specified domain/IP only"
 fi
 
 # Generate server certificate
-openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -extensions v3_req -extfile server.ext
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -extfile server.ext
 
 echo "👤 3. Generating client certificate..."
 # Generate client private key
@@ -179,7 +179,7 @@ extendedKeyUsage = clientAuth
 EOF
 
 # Generate client certificate
-openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -extensions v3_req -extfile client.ext
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -extfile client.ext
 
 echo "📦 4. Creating combined PEM files..."
 
