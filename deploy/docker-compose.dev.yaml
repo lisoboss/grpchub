@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  grpchub-server-dev:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile
+      target: builder
+    container_name: grpchub-server-dev
+    ports:
+      - "50055:50055"
+      - "9090:9090"  # Debug port
+    volumes:
+      - ../:/usr/src/app
+      - ./certs/server.pem:/usr/src/app/server.pem:ro
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/usr/src/app/target
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+    working_dir: /usr/src/app
+    command: ["cargo", "run", "--bin", "grpchub-serve", "--", "--addr", "[::]:50055", "--pem", "/usr/src/app/server.pem"]
+    restart: unless-stopped
+    networks:
+      - grpchub-dev-network
+    depends_on:
+      cert-generator-dev:
+        condition: service_completed_successfully
+
+  # Certificate generation for development
+  cert-generator-dev:
+    image: alpine/openssl:latest
+    container_name: grpchub-cert-generator-dev
+    volumes:
+      - ./cert-conf:/cert-conf:ro
+      - ./certs:/certs
+      - ./gen-certs.sh:/gen-certs.sh:ro
+    working_dir: /
+    command: ["sh", "/gen-certs.sh"]
+
+  # Development tools container
+  dev-tools:
+    image: rust:1.87.0-bookworm
+    container_name: grpchub-dev-tools
+    volumes:
+      - ../:/workspace
+      - cargo-cache:/usr/local/cargo/registry
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    networks:
+      - grpchub-dev-network
+    profiles:
+      - tools
+
+networks:
+  grpchub-dev-network:
+    driver: bridge
+    name: grpchub-dev-network
+
+volumes:
+  cargo-cache:
+    driver: local
+  target-cache:
+    driver: local

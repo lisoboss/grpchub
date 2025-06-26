@@ -5,7 +5,7 @@ package channel.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/lisoboss/grpchub/gen/channel/v1;channel";
+option go_package = "github.com/lisoboss/grpchub-go/gen/channel/v1;channel";
 
 service ChannelService {
   // 建立消息通道，支持双向流

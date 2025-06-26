@@ -2,10 +2,10 @@ version: v2
 clean: true
 plugins:
   - remote: buf.build/protocolbuffers/go
-    out: grpchub-client-go/gen
+    out: grpchub-go/gen
     opt: paths=source_relative
   - remote: buf.build/grpc/go:v1.5.1
-    out: grpchub-client-go/gen
+    out: grpchub-go/gen
     opt: paths=source_relative
 inputs:
   - directory: proto

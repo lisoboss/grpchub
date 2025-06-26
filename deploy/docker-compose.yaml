@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  grpchub-server:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-grpchub}-server
+    ports:
+      - "${GRPCHUB_PORT:-50055}:50055"
+    volumes:
+      - ${CERTS_VOLUME:-./certs}/server.pem:/usr/app/server.pem:ro
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - RUST_BACKTRACE=${RUST_BACKTRACE:-0}
+    command: 
+      - grpchub-serve
+      - --addr
+      - ${GRPCHUB_ADDR:-[::]:50055}
+      - --pem
+      - /usr/app/server.pem
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 50055 || exit 1"]
+      interval: ${HEALTH_CHECK_INTERVAL:-30s}
+      timeout: ${HEALTH_CHECK_TIMEOUT:-10s}
+      retries: ${HEALTH_CHECK_RETRIES:-3}
+      start_period: 10s
+    networks:
+      - grpchub-network
+
+
+  # Certificate generation service (manual trigger only)
+  cert-generator:
+    image: alpine/openssl:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-grpchub}-cert-generator
+    volumes:
+      - ./cert-conf:/cert-conf:ro
+      - ${CERTS_VOLUME:-./certs}:/certs
+      - ./gen-certs.sh:/gen-certs.sh:ro
+    working_dir: /
+    command: ["sh", "/gen-certs.sh"]
+    profiles:
+      - tools
+
+networks:
+  grpchub-network:
+    driver: bridge
+    name: ${NETWORK_NAME:-grpchub-network}

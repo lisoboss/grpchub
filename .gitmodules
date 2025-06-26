@@ -1,0 +1,3 @@
+[submodule "grpchub-go"]
+	path = grpchub-go
+	url = git@github.com:lisoboss/grpchub-go.git

@@ -1,9 +1,7 @@
 [workspace]
-members = [
-    "grpchub-serve",
-    "grpchub-pb",
-]
+members = ["grpchub-serve", "grpchub-pb"]
 resolver = "3"
 
 [workspace.dependencies]
 grpchub-pb = { path = "grpchub-pb" }
+grpchub-serve = { path = "grpchub-serve" }
