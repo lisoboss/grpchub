@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"encoding/pem"
-	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -12,6 +10,7 @@ import (
 
 	"github.com/lisoboss/grpchub-go"
 	"github.com/lisoboss/grpchub-go/grpcx"
+	"github.com/lisoboss/grpchub-go/utils"
 )
 
 const (
@@ -21,44 +20,8 @@ const (
 
 var logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{}))
 
-func loadTLSCredentialsFromPEM(pemFile string) ([]byte, []byte, []byte, error) {
-	data, err := os.ReadFile(pemFile)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to read pem file: %w", err)
-	}
-	var certPEM, keyPEM, caPEM []byte
-
-	for {
-		var block *pem.Block
-		block, data = pem.Decode(data)
-		if block == nil {
-			break
-		}
-		switch block.Type {
-		case "CERTIFICATE":
-			// 第一个 CERTIFICATE 是 client cert，最后一个是 CA
-			if certPEM == nil {
-				certPEM = pem.EncodeToMemory(block)
-			} else {
-				caPEM = append(caPEM, pem.EncodeToMemory(block)...)
-			}
-		case "PRIVATE KEY":
-			keyPEM = pem.EncodeToMemory(block)
-		default:
-			// 忽略其他类型
-		}
-	}
-
-	if certPEM == nil || keyPEM == nil || caPEM == nil {
-		return nil, nil, nil, fmt.Errorf("incomplete PEM data (cert/key/ca)")
-	}
-
-	return caPEM, certPEM, keyPEM, nil
-
-}
-
 func newGHC() *grpchub.GrpcHubClient {
-	caPEM, certPEM, keyPEM, err := loadTLSCredentialsFromPEM("./client.pem")
+	caPEM, certPEM, keyPEM, err := utils.LoadTLSCredentialsFromPEM("./client.pem")
 	if err != nil {
 		logger.Error("failed to load tls pem", "err", err)
 		os.Exit(1)

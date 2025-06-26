@@ -5,6 +5,26 @@
 
 set -e  # 遇到错误时退出
 
+genpkcs8key() {
+    local key_name="$1"
+    local key_bits="$2"
+    local temp_key="${key_name}_rsa.key"
+    local final_key="${key_name}.key"
+    
+    # 生成 RSA 密钥
+    openssl genrsa -out "$temp_key" "$key_bits"
+    
+    # 检查是否已经是 PKCS#8 格式
+    if head -1 "$temp_key" | grep -q "BEGIN PRIVATE KEY"; then
+        # 已经是 PKCS#8 格式，直接重命名
+        mv "$temp_key" "$final_key"
+    else
+        # 不是 PKCS#8 格式，需要转换
+        openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in "$temp_key" -out "$final_key"
+        rm -f "$temp_key"
+    fi
+}
+
 echo "🔐 开始生成TLS证书和PEM文件..."
 
 # 创建证书目录
@@ -19,14 +39,14 @@ cp -p ../cert-conf/*.conf .
 
 echo "🔑 1. 生成CA根证书..."
 # 生成CA私钥
-openssl genrsa -out ca.key 4096
+genpkcs8key "ca" 4096
 
 # 生成CA根证书
 openssl req -new -x509 -days 3650 -key ca.key -out ca.crt -config ca.conf
 
 echo "🖥️  2. 生成服务器证书..."
 # 生成服务器私钥
-openssl genrsa -out server.key 2048
+genpkcs8key "server" 2048
 
 # 生成服务器证书签名请求
 openssl req -new -key server.key -out server.csr -config server.conf
@@ -36,7 +56,7 @@ openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out s
 
 echo "👤 3. 生成客户端证书..."
 # 生成客户端私钥
-openssl genrsa -out client.key 2048
+genpkcs8key "client" 2048
 
 # 生成客户端证书签名请求
 openssl req -new -key client.key -out client.csr -config client.conf
